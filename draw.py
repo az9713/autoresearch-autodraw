@@ -19,7 +19,7 @@ from prepare import (
 # ---------------------------------------------------------------------------
 
 TARGET_IMAGE   = "targets/dog_in_snow.png"
-EXPERIMENT_NUM = 10
+EXPERIMENT_NUM = 11
 
 
 # ---------------------------------------------------------------------------
@@ -28,9 +28,9 @@ EXPERIMENT_NUM = 10
 
 def draw(page, canvas_bbox):
     """
-    Pixel-guided drawing: load target, draw sky, gray region, green trees,
-    and dog colors using horizontal segment strokes row by row.
-    Simulation predicts loss ~0.086 (vs current best 0.132).
+    Pixel-guided drawing: sky, gray backdrop, green trees, cyan snow, dog colors.
+    Draw order: background first (sky, gray, green), then snow, then dog on top.
+    Simulation predicts loss ~0.046.
     """
     cx = canvas_bbox["x"]
     cy = canvas_bbox["y"]
@@ -104,7 +104,13 @@ def draw(page, canvas_bbox):
         for x1, x2 in segments(np.all(target_arr[y] == [0, 128, 0], axis=1)):
             hstroke(y, x1, x2)
 
-    # 4. Dog colors: pixel-mapped from target, all rows
+    # 4. Cyan snow lines: pixel-mapped from target
+    set_color(128, 255, 255)
+    for y in range(0, h):
+        for x1, x2 in segments(np.all(target_arr[y] == [128, 255, 255], axis=1)):
+            hstroke(y, x1, x2)
+
+    # 5. Dog colors: pixel-mapped from target, all rows (overwrites snow)
     for r, g, b in [(255,128,64),(255,255,128),(255,0,128),(128,64,0),(0,0,0)]:
         set_color(r, g, b)
         for y in range(0, h):
