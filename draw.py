@@ -19,7 +19,7 @@ from prepare import (
 # ---------------------------------------------------------------------------
 
 TARGET_IMAGE   = "targets/dog_in_snow.png"
-EXPERIMENT_NUM = 13
+EXPERIMENT_NUM = 14
 
 
 # ---------------------------------------------------------------------------
@@ -28,8 +28,8 @@ EXPERIMENT_NUM = 13
 
 def draw(page, canvas_bbox):
     """
-    Pixel-guided drawing: sky ends at y=67 (not y=84 — was wrong!),
-    gray starts at y=68. Simulation predicts loss ~0.007.
+    Pixel-map sky too: sky has white snowflakes (123 wrong pixels with full-width).
+    Simulation predicts loss ~0.0038 (from 0.0066).
     """
     cx = canvas_bbox["x"]
     cy = canvas_bbox["y"]
@@ -86,10 +86,11 @@ def draw(page, canvas_bbox):
     page.mouse.click(17, 158)
     page.wait_for_timeout(150)
 
-    # 1. Sky: (0,128,255), canvas rows 0-67 (sky ends at y=67 exactly)
+    # 1. Sky: pixel-mapped (target has snowflakes — white holes in sky)
     set_color(0, 128, 255)
     for y in range(0, 68):
-        hstroke(y, 0, w)
+        for x1, x2 in segments(np.all(target_arr[y] == [0, 128, 255], axis=1)):
+            hstroke(y, x1, x2)
 
     # 2. Gray region: (192,192,192), canvas rows 68-122
     set_color(192, 192, 192)
