@@ -19,7 +19,7 @@ from prepare import (
 # ---------------------------------------------------------------------------
 
 TARGET_IMAGE   = "targets/dog_in_snow.png"
-EXPERIMENT_NUM = 15
+EXPERIMENT_NUM = 16
 
 
 # ---------------------------------------------------------------------------
@@ -28,8 +28,8 @@ EXPERIMENT_NUM = 15
 
 def draw(page, canvas_bbox):
     """
-    Add dog body gray (y=312-319): 725 gray pixels missed previously.
-    Simulation predicts loss ~0.0011 (from 0.0038).
+    Pixel-map gray for ALL rows: fixes edge whites + dog body.
+    Simulation predicts loss 0.0000 (perfect). ~82s expected.
     """
     cx = canvas_bbox["x"]
     cy = canvas_bbox["y"]
@@ -92,11 +92,9 @@ def draw(page, canvas_bbox):
         for x1, x2 in segments(np.all(target_arr[y] == [0, 128, 255], axis=1)):
             hstroke(y, x1, x2)
 
-    # 2. Gray region: full-width for y=68-122, plus dog-body gray y=312-319
+    # 2. Gray: pixel-mapped for ALL rows (tree backdrop + dog body + fixes edge whites)
     set_color(192, 192, 192)
-    for y in range(68, 123):
-        hstroke(y, 0, w)
-    for y in range(312, 320):
+    for y in range(0, h):
         for x1, x2 in segments(np.all(target_arr[y] == [192, 192, 192], axis=1)):
             hstroke(y, x1, x2)
 
