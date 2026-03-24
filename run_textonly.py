@@ -19,6 +19,7 @@ from prepare_textonly import (
     cleanup,
     StrokeCountingMouse,
     StrokeBudgetExceeded,
+    PageWithCountedMouse,
     save_textonly_screenshot,
     compute_multitarget_loss,
     check_draw_source,
@@ -58,13 +59,14 @@ t_start = time.time()
 pw, browser, page = launch_browser()
 canvas_bbox = get_canvas_bbox(page)
 
-# Wrap mouse with stroke counter
+# Wrap page with stroke-counting mouse proxy
+# (Playwright's page.mouse is read-only, so we wrap the page object instead)
 counter = StrokeCountingMouse(page.mouse, canvas_bbox, MAX_STROKES)
-page.mouse = counter
+counted_page = PageWithCountedMouse(page, counter)
 
 budget_exceeded = False
 try:
-    draw(page, canvas_bbox)
+    draw(counted_page, canvas_bbox)
 except StrokeBudgetExceeded as e:
     print(f"WARNING: {e}")
     print("Drawing stopped at stroke limit. Scoring what was drawn so far.")

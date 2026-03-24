@@ -99,6 +99,25 @@ class StrokeCountingMouse:
         return self._real_mouse.wheel(delta_x, delta_y, **kwargs)
 
 
+class PageWithCountedMouse:
+    """
+    Wraps a Playwright Page so that page.mouse returns a StrokeCountingMouse.
+    Playwright's page.mouse is a read-only property, so we can't reassign it
+    directly. This proxy intercepts .mouse and delegates everything else.
+    """
+
+    def __init__(self, page, counted_mouse):
+        self._page = page
+        self._counted_mouse = counted_mouse
+
+    @property
+    def mouse(self):
+        return self._counted_mouse
+
+    def __getattr__(self, name):
+        return getattr(self._page, name)
+
+
 # ---------------------------------------------------------------------------
 # Screenshot helper
 # ---------------------------------------------------------------------------
