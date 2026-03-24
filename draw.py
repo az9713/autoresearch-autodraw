@@ -7,6 +7,8 @@ Do NOT modify prepare.py or the structured output block at the bottom.
 """
 
 import time
+import numpy as np
+from PIL import Image
 from prepare import (
     launch_browser, get_canvas_bbox,
     compute_draw_loss, save_experiment_screenshot, cleanup,
@@ -17,7 +19,7 @@ from prepare import (
 # ---------------------------------------------------------------------------
 
 TARGET_IMAGE   = "targets/dog_in_snow.png"
-EXPERIMENT_NUM = 9
+EXPERIMENT_NUM = 10
 
 
 # ---------------------------------------------------------------------------
@@ -26,14 +28,17 @@ EXPERIMENT_NUM = 9
 
 def draw(page, canvas_bbox):
     """
-    Key insight: trees hurt SSIM badly (solid rects vs complex shapes).
-    Sky-only simulation → draw_loss ~0.130 (vs 0.193 baseline).
-    Strategy: paint only the sky (0,128,255) = exact target sky color.
+    Pixel-guided drawing: load target, draw sky, gray region, green trees,
+    and dog colors using horizontal segment strokes row by row.
+    Simulation predicts loss ~0.086 (vs current best 0.132).
     """
     cx = canvas_bbox["x"]
     cy = canvas_bbox["y"]
-    w  = canvas_bbox["width"]
-    h  = canvas_bbox["height"]
+    w  = canvas_bbox["width"]   # 683
+    h  = canvas_bbox["height"]  # 384
+
+    # Load target for pixel-guided stroke placement
+    target_arr = np.array(Image.open(TARGET_IMAGE).convert("RGB"))
 
     # Read palette from .swatch.color-button canvas pixels
     palette = page.evaluate("""() => {
@@ -46,24 +51,65 @@ def draw(page, canvas_bbox):
         });
     }""")
 
+    current_rgb = [None]
+
     def set_color(r, g, b):
+        if current_rgb[0] == (r, g, b):
+            return
         best = min(palette, key=lambda p: (p['rv']-r)**2+(p['gv']-g)**2+(p['bv']-b)**2)
         page.mouse.click(best['x'], best['y'])
         page.wait_for_timeout(50)
+        current_rgb[0] = (r, g, b)
 
-    # Select Line tool (DIV title='Line' at x=17, y=158)
+    def hstroke(canvas_y, x1, x2):
+        page.mouse.move(cx + x1, cy + canvas_y)
+        page.mouse.down()
+        page.mouse.move(cx + x2, cy + canvas_y)
+        page.mouse.up()
+        page.wait_for_timeout(12)
+
+    def segments(mask):
+        """Return list of (x1, x2) contiguous runs where mask is True."""
+        if not mask.any():
+            return []
+        xs = np.where(mask)[0]
+        segs = []
+        s = p = xs[0]
+        for x in xs[1:]:
+            if x > p + 1:
+                segs.append((int(s), int(p)))
+                s = x
+            p = x
+        segs.append((int(s), int(p)))
+        return segs
+
+    # Select Line tool
     page.mouse.click(17, 158)
     page.wait_for_timeout(150)
 
-    # Sky: (0,128,255) exact match to target, top 22% of canvas
-    sky_y = int(h * 0.22)  # ~84
+    # 1. Sky: (0,128,255), canvas rows 0-84
     set_color(0, 128, 255)
-    for y in range(0, sky_y + 1):
-        page.mouse.move(cx, cy + y)
-        page.mouse.down()
-        page.mouse.move(cx + w, cy + y)
-        page.mouse.up()
-        page.wait_for_timeout(12)
+    for y in range(0, 85):
+        hstroke(y, 0, w)
+
+    # 2. Gray region: (192,192,192), canvas rows 85-121
+    #    Matches target's light-gray tree-backdrop area
+    set_color(192, 192, 192)
+    for y in range(85, 122):
+        hstroke(y, 0, w)
+
+    # 3. Green trees: pixel-mapped from target, canvas rows 85-134
+    set_color(0, 128, 0)
+    for y in range(85, 135):
+        for x1, x2 in segments(np.all(target_arr[y] == [0, 128, 0], axis=1)):
+            hstroke(y, x1, x2)
+
+    # 4. Dog colors: pixel-mapped from target, all rows
+    for r, g, b in [(255,128,64),(255,255,128),(255,0,128),(128,64,0),(0,0,0)]:
+        set_color(r, g, b)
+        for y in range(0, h):
+            for x1, x2 in segments(np.all(target_arr[y] == [r,g,b], axis=1)):
+                hstroke(y, x1, x2)
 
 
 # ---------------------------------------------------------------------------
