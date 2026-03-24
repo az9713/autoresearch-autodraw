@@ -19,7 +19,7 @@ from prepare import (
 # ---------------------------------------------------------------------------
 
 TARGET_IMAGE   = "targets/dog_in_snow.png"
-EXPERIMENT_NUM = 14
+EXPERIMENT_NUM = 15
 
 
 # ---------------------------------------------------------------------------
@@ -28,8 +28,8 @@ EXPERIMENT_NUM = 14
 
 def draw(page, canvas_bbox):
     """
-    Pixel-map sky too: sky has white snowflakes (123 wrong pixels with full-width).
-    Simulation predicts loss ~0.0038 (from 0.0066).
+    Add dog body gray (y=312-319): 725 gray pixels missed previously.
+    Simulation predicts loss ~0.0011 (from 0.0038).
     """
     cx = canvas_bbox["x"]
     cy = canvas_bbox["y"]
@@ -92,10 +92,13 @@ def draw(page, canvas_bbox):
         for x1, x2 in segments(np.all(target_arr[y] == [0, 128, 255], axis=1)):
             hstroke(y, x1, x2)
 
-    # 2. Gray region: (192,192,192), canvas rows 68-122
+    # 2. Gray region: full-width for y=68-122, plus dog-body gray y=312-319
     set_color(192, 192, 192)
     for y in range(68, 123):
         hstroke(y, 0, w)
+    for y in range(312, 320):
+        for x1, x2 in segments(np.all(target_arr[y] == [192, 192, 192], axis=1)):
+            hstroke(y, x1, x2)
 
     # 3. Green trees: pixel-mapped from target, canvas rows 89-139
     #    (green first appears at y=89 in original)
