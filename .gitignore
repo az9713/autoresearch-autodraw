@@ -2,5 +2,7 @@ __pycache__/
 *.py[oc]
 .venv/
 results.tsv
+results_textonly.tsv
 screenshots/
+screenshots_textonly/
 run.log
