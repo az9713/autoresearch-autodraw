@@ -17,7 +17,7 @@ from prepare import (
 # ---------------------------------------------------------------------------
 
 TARGET_IMAGE   = "targets/dog_in_snow.png"
-EXPERIMENT_NUM = 0   # increment each experiment for screenshot naming
+EXPERIMENT_NUM = 9
 
 
 # ---------------------------------------------------------------------------
@@ -26,33 +26,44 @@ EXPERIMENT_NUM = 0   # increment each experiment for screenshot naming
 
 def draw(page, canvas_bbox):
     """
-    Draw on the JS Paint canvas using Playwright mouse/keyboard APIs.
-
-    canvas_bbox: {x, y, width, height} — canvas position in the page.
-    cx, cy = top-left corner of the canvas.
-
-    Tool/color selection cheatsheet:
-      - page.mouse.click(x, y)              — click at page coordinates
-      - page.mouse.move(x, y)               — move mouse
-      - page.mouse.down() / page.mouse.up() — press/release for strokes
-      - page.keyboard.press("Escape")       — cancel tool / close dialogs
-
-    JS Paint toolbar (approximate page coords, varies by viewport):
-      Tools are in the left panel. Colors are in the bottom palette.
-      Use get_canvas_bbox() for canvas origin; toolbar is to the left.
-
-    Baseline: draws a single diagonal line across the canvas.
+    Key insight: trees hurt SSIM badly (solid rects vs complex shapes).
+    Sky-only simulation → draw_loss ~0.130 (vs 0.193 baseline).
+    Strategy: paint only the sky (0,128,255) = exact target sky color.
     """
     cx = canvas_bbox["x"]
     cy = canvas_bbox["y"]
     w  = canvas_bbox["width"]
     h  = canvas_bbox["height"]
 
-    # Baseline: single diagonal line (pencil tool, default black)
-    page.mouse.move(cx + 10, cy + 10)
-    page.mouse.down()
-    page.mouse.move(cx + w - 10, cy + h - 10)
-    page.mouse.up()
+    # Read palette from .swatch.color-button canvas pixels
+    palette = page.evaluate("""() => {
+        return Array.from(document.querySelectorAll('.swatch.color-button')).map(s => {
+            const c = s.querySelector('canvas');
+            let rv=0,gv=0,bv=0;
+            if(c){try{const d=c.getContext('2d').getImageData(1,1,1,1).data;rv=d[0];gv=d[1];bv=d[2];}catch(e){}}
+            const r=s.getBoundingClientRect();
+            return {rv,gv,bv,x:r.x+r.width/2,y:r.y+r.height/2};
+        });
+    }""")
+
+    def set_color(r, g, b):
+        best = min(palette, key=lambda p: (p['rv']-r)**2+(p['gv']-g)**2+(p['bv']-b)**2)
+        page.mouse.click(best['x'], best['y'])
+        page.wait_for_timeout(50)
+
+    # Select Line tool (DIV title='Line' at x=17, y=158)
+    page.mouse.click(17, 158)
+    page.wait_for_timeout(150)
+
+    # Sky: (0,128,255) exact match to target, top 22% of canvas
+    sky_y = int(h * 0.22)  # ~84
+    set_color(0, 128, 255)
+    for y in range(0, sky_y + 1):
+        page.mouse.move(cx, cy + y)
+        page.mouse.down()
+        page.mouse.move(cx + w, cy + y)
+        page.mouse.up()
+        page.wait_for_timeout(12)
 
 
 # ---------------------------------------------------------------------------
