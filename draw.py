@@ -19,7 +19,7 @@ from prepare import (
 # ---------------------------------------------------------------------------
 
 TARGET_IMAGE   = "targets/dog_in_snow.png"
-EXPERIMENT_NUM = 11
+EXPERIMENT_NUM = 12
 
 
 # ---------------------------------------------------------------------------
@@ -29,8 +29,8 @@ EXPERIMENT_NUM = 11
 def draw(page, canvas_bbox):
     """
     Pixel-guided drawing: sky, gray backdrop, green trees, cyan snow, dog colors.
-    Draw order: background first (sky, gray, green), then snow, then dog on top.
-    Simulation predicts loss ~0.046.
+    Extended green to y=139, gray to y=122, reduced timeout to 5ms.
+    Simulation predicts loss ~0.035.
     """
     cx = canvas_bbox["x"]
     cy = canvas_bbox["y"]
@@ -66,7 +66,7 @@ def draw(page, canvas_bbox):
         page.mouse.down()
         page.mouse.move(cx + x2, cy + canvas_y)
         page.mouse.up()
-        page.wait_for_timeout(12)
+        page.wait_for_timeout(5)
 
     def segments(mask):
         """Return list of (x1, x2) contiguous runs where mask is True."""
@@ -92,15 +92,15 @@ def draw(page, canvas_bbox):
     for y in range(0, 85):
         hstroke(y, 0, w)
 
-    # 2. Gray region: (192,192,192), canvas rows 85-121
+    # 2. Gray region: (192,192,192), canvas rows 85-122
     #    Matches target's light-gray tree-backdrop area
     set_color(192, 192, 192)
-    for y in range(85, 122):
+    for y in range(85, 123):
         hstroke(y, 0, w)
 
-    # 3. Green trees: pixel-mapped from target, canvas rows 85-134
+    # 3. Green trees: pixel-mapped from target, canvas rows 85-139
     set_color(0, 128, 0)
-    for y in range(85, 135):
+    for y in range(85, 140):
         for x1, x2 in segments(np.all(target_arr[y] == [0, 128, 0], axis=1)):
             hstroke(y, x1, x2)
 
