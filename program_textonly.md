@@ -177,8 +177,8 @@ is a win.
 
 ## Timeout
 
-Each experiment should take <60 seconds total. If a run exceeds 3 minutes,
-kill it and treat it as a failure (discard and revert).
+Each experiment should take well under a minute (50 strokes is fast). If a
+run exceeds 5 minutes, kill it and treat it as a failure (discard and revert).
 
 ## Crashes
 
