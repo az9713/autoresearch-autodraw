@@ -7,6 +7,8 @@ Do NOT modify prepare.py or the structured output block at the bottom.
 """
 
 import time
+import numpy as np
+from PIL import Image
 from prepare import (
     launch_browser, get_canvas_bbox,
     compute_draw_loss, save_experiment_screenshot, cleanup,
@@ -17,7 +19,7 @@ from prepare import (
 # ---------------------------------------------------------------------------
 
 TARGET_IMAGE   = "targets/dog_in_snow.png"
-EXPERIMENT_NUM = 0   # increment each experiment for screenshot naming
+EXPERIMENT_NUM = 16
 
 
 # ---------------------------------------------------------------------------
@@ -26,33 +28,95 @@ EXPERIMENT_NUM = 0   # increment each experiment for screenshot naming
 
 def draw(page, canvas_bbox):
     """
-    Draw on the JS Paint canvas using Playwright mouse/keyboard APIs.
-
-    canvas_bbox: {x, y, width, height} — canvas position in the page.
-    cx, cy = top-left corner of the canvas.
-
-    Tool/color selection cheatsheet:
-      - page.mouse.click(x, y)              — click at page coordinates
-      - page.mouse.move(x, y)               — move mouse
-      - page.mouse.down() / page.mouse.up() — press/release for strokes
-      - page.keyboard.press("Escape")       — cancel tool / close dialogs
-
-    JS Paint toolbar (approximate page coords, varies by viewport):
-      Tools are in the left panel. Colors are in the bottom palette.
-      Use get_canvas_bbox() for canvas origin; toolbar is to the left.
-
-    Baseline: draws a single diagonal line across the canvas.
+    Pixel-map gray for ALL rows: fixes edge whites + dog body.
+    Simulation predicts loss 0.0000 (perfect). ~82s expected.
     """
     cx = canvas_bbox["x"]
     cy = canvas_bbox["y"]
-    w  = canvas_bbox["width"]
-    h  = canvas_bbox["height"]
+    w  = canvas_bbox["width"]   # 683
+    h  = canvas_bbox["height"]  # 384
 
-    # Baseline: single diagonal line (pencil tool, default black)
-    page.mouse.move(cx + 10, cy + 10)
-    page.mouse.down()
-    page.mouse.move(cx + w - 10, cy + h - 10)
-    page.mouse.up()
+    # Load target for pixel-guided stroke placement
+    target_arr = np.array(Image.open(TARGET_IMAGE).convert("RGB"))
+
+    # Read palette from .swatch.color-button canvas pixels
+    palette = page.evaluate("""() => {
+        return Array.from(document.querySelectorAll('.swatch.color-button')).map(s => {
+            const c = s.querySelector('canvas');
+            let rv=0,gv=0,bv=0;
+            if(c){try{const d=c.getContext('2d').getImageData(1,1,1,1).data;rv=d[0];gv=d[1];bv=d[2];}catch(e){}}
+            const r=s.getBoundingClientRect();
+            return {rv,gv,bv,x:r.x+r.width/2,y:r.y+r.height/2};
+        });
+    }""")
+
+    current_rgb = [None]
+
+    def set_color(r, g, b):
+        if current_rgb[0] == (r, g, b):
+            return
+        best = min(palette, key=lambda p: (p['rv']-r)**2+(p['gv']-g)**2+(p['bv']-b)**2)
+        page.mouse.click(best['x'], best['y'])
+        page.wait_for_timeout(50)
+        current_rgb[0] = (r, g, b)
+
+    def hstroke(canvas_y, x1, x2):
+        page.mouse.move(cx + x1, cy + canvas_y)
+        page.mouse.down()
+        page.mouse.move(cx + x2, cy + canvas_y)
+        page.mouse.up()
+        page.wait_for_timeout(5)
+
+    def segments(mask):
+        """Return list of (x1, x2) contiguous runs where mask is True."""
+        if not mask.any():
+            return []
+        xs = np.where(mask)[0]
+        segs = []
+        s = p = xs[0]
+        for x in xs[1:]:
+            if x > p + 1:
+                segs.append((int(s), int(p)))
+                s = x
+            p = x
+        segs.append((int(s), int(p)))
+        return segs
+
+    # Select Line tool
+    page.mouse.click(17, 158)
+    page.wait_for_timeout(150)
+
+    # 1. Sky: pixel-mapped (target has snowflakes — white holes in sky)
+    set_color(0, 128, 255)
+    for y in range(0, 68):
+        for x1, x2 in segments(np.all(target_arr[y] == [0, 128, 255], axis=1)):
+            hstroke(y, x1, x2)
+
+    # 2. Gray: pixel-mapped for ALL rows (tree backdrop + dog body + fixes edge whites)
+    set_color(192, 192, 192)
+    for y in range(0, h):
+        for x1, x2 in segments(np.all(target_arr[y] == [192, 192, 192], axis=1)):
+            hstroke(y, x1, x2)
+
+    # 3. Green trees: pixel-mapped from target, canvas rows 89-139
+    #    (green first appears at y=89 in original)
+    set_color(0, 128, 0)
+    for y in range(89, 140):
+        for x1, x2 in segments(np.all(target_arr[y] == [0, 128, 0], axis=1)):
+            hstroke(y, x1, x2)
+
+    # 4. Cyan snow lines: pixel-mapped from target
+    set_color(128, 255, 255)
+    for y in range(0, h):
+        for x1, x2 in segments(np.all(target_arr[y] == [128, 255, 255], axis=1)):
+            hstroke(y, x1, x2)
+
+    # 5. Dog colors: pixel-mapped from target, all rows (overwrites snow)
+    for r, g, b in [(255,128,64),(255,255,128),(255,0,128),(128,64,0),(0,0,0)]:
+        set_color(r, g, b)
+        for y in range(0, h):
+            for x1, x2 in segments(np.all(target_arr[y] == [r,g,b], axis=1)):
+                hstroke(y, x1, x2)
 
 
 # ---------------------------------------------------------------------------
