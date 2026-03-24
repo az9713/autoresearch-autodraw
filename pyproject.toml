@@ -1,0 +1,11 @@
+[project]
+name = "autodraw"
+version = "0.1.0"
+description = "Autonomous drawing research via JS Paint"
+requires-python = ">=3.10"
+dependencies = [
+    "playwright>=1.40.0",
+    "Pillow>=10.0.0",
+    "scikit-image>=0.22.0",
+    "numpy>=1.24.0",
+]
